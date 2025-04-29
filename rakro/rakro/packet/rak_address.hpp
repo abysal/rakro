@@ -2,6 +2,8 @@
 #pragma once
 
 #include "rakro/internal/binary_buffer.hpp"
+#include "rakro/internal/buffer_company.hpp"
+#include "rakro/internal/net.hpp"
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -12,12 +14,19 @@ namespace rakro::packets {
         uint32_t ip;
         uint16_t port;
 
+        static RakAddress from_ipv4(rakro::detail::IPV4Addr address) {
+            const auto ip   = *reinterpret_cast<uint32_t*>(&address.address.sin_addr);
+            const auto port = std::bit_cast<uint16_t>(address.address.sin_port);
+            return RakAddress{.ip = ip, .port = port};
+        }
+
         static std::optional<RakAddress> from_bytes(std::span<uint8_t> address) {
             if (address.size() < 7) {
                 return std::nullopt;
             }
 
-            auto buff = BinaryBuffer(address);
+            auto buffer = RentedBuffer(address, nullptr);
+            auto buff   = BinaryBuffer(std::move(buffer));
 
             if (buff.next_byte() != 4) {
                 return std::nullopt;
@@ -39,8 +48,8 @@ namespace rakro {
 
         static void write(const packets::RakAddress& self, BinaryBuffer& buff) {
             buff.write<uint8_t>(4);
-            buff.write(self.ip);
-            buff.write(self.port);
+            buff.write<uint32_t>(self.ip);
+            buff.write<uint16_t>(self.port);
         }
 
         static packets::RakAddress read(BinaryBuffer& buffer) {
@@ -48,10 +57,7 @@ namespace rakro {
                 throw std::runtime_error("invalid IP");
             }
 
-            return packets::RakAddress::from_bytes(
-                       buffer.underlying().subspan(0, buffer.remaining())
-            )
-                .value();
+            return packets::RakAddress::from_bytes(buffer.remaining_slice()).value();
         }
 
         static size_t size(const std::optional<packets::RakAddress>& /*unused*/) {

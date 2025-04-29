@@ -1,5 +1,8 @@
 
 #pragma once
+#include "./int24_t.hpp"
+#include "buffer_company.hpp"
+#include "rakro/internal/buffer_company.hpp"
 #include <array>
 #include <bit>
 #include <cstdint>
@@ -9,6 +12,9 @@
 #include <utility>
 
 namespace rakro {
+
+    //  This class reverses the endian of any int or float wrote
+
     class BinaryBuffer;
 
     template <typename T> struct BinaryDataInterface {
@@ -27,17 +33,26 @@ namespace rakro {
     class BinaryBuffer {
     public:
         explicit BinaryBuffer(
-            std::span<uint8_t> buffer, size_t artificial_limit = static_cast<size_t>(-1)
-        ) {
-
-            this->real_buffer = buffer;
+            RentedBuffer&& buffer, size_t artificial_limit = static_cast<size_t>(-1)
+        )
+            : real_buffer(std::forward<RentedBuffer>(buffer)) {
 
             if (artificial_limit == static_cast<size_t>(-1)) {
-                this->bytes = this->real_buffer;
+                this->bytes = this->real_buffer.get_memory();
             } else {
-                this->bytes = this->real_buffer.subspan(0, artificial_limit);
+                this->bytes = this->real_buffer.get_memory().subspan(0, artificial_limit);
             }
         };
+
+        BinaryBuffer()               = default;
+        BinaryBuffer(BinaryBuffer&&) = default;
+        BinaryBuffer& operator=(BinaryBuffer&& other) noexcept {
+            if (this != &other) {
+                real_buffer = std::move(other.real_buffer);
+                bytes       = std::move(other.bytes);
+            }
+            return *this;
+        }
 
         template <BinaryData T> T read_next() {
             this->bounds_check(BinaryDataInterface<T>::size(std::nullopt));
@@ -64,7 +79,7 @@ namespace rakro {
         template <BinaryData T> void write(const T& val) {
             this->bounds_check(BinaryDataInterface<T>::size(val));
 
-            BinaryDataInterface<T>::write(std::forward<T>(val), *this);
+            BinaryDataInterface<T>::write(val, *this);
         }
 
         template <BinaryData T> void write(T& val) {
@@ -83,6 +98,10 @@ namespace rakro {
             this->bytes[this->index++] = val;
         }
 
+        std::span<uint8_t> remaining_slice() noexcept {
+            return this->bytes.subspan(this->index, this->remaining());
+        }
+
         uint8_t* raw() const { return this->bytes.data(); }
 
         size_t consumed() const { return this->index; }
@@ -91,9 +110,9 @@ namespace rakro {
             auto access_index = this->index;
             this->index       = 0;
             if (limit == static_cast<size_t>(-1)) {
-                this->bytes = this->real_buffer;
+                this->bytes = this->real_buffer.get_memory();
             } else {
-                this->bytes = this->real_buffer.subspan(0, limit);
+                this->bytes = this->real_buffer.get_memory().subspan(0, limit);
             }
 
             return access_index;
@@ -102,10 +121,17 @@ namespace rakro {
         std::span<uint8_t> underlying() { return this->bytes; }
 
         std::span<uint8_t> consumed_slice() { return this->bytes.subspan(0, this->consumed()); }
+        const std::span<const uint8_t> consumed_slice() const {
+            return this->bytes.subspan(0, this->consumed());
+        }
+
+        void go_to(size_t new_index) noexcept { this->index = new_index; }
 
         size_t remaining() const noexcept { return this->size() - this->index; }
 
         size_t size() const noexcept { return this->bytes.size(); }
+
+        void skipn(size_t count) noexcept { this->index += count; }
 
     private:
         [[maybe_unused]] bool bounds_check(size_t extra) {
@@ -117,11 +143,12 @@ namespace rakro {
 
     private:
         std::span<uint8_t> bytes{};
-        std::span<uint8_t> real_buffer{};
+        RentedBuffer       real_buffer{};
         size_t             index{0};
     };
 } // namespace rakro
 
+// This impl is actually bugged, but in a way which fixes it soooooooooooooooo, NO ONE TOUCH IT
 #define INTEGRAL_BINARY(type)                                                                  \
     namespace rakro {                                                                          \
         template <> struct BinaryDataInterface<type> {                                         \
@@ -154,6 +181,30 @@ INTEGRAL_BINARY(uint8_t);
 INTEGRAL_BINARY(int8_t);
 INTEGRAL_BINARY(char);
 INTEGRAL_BINARY(bool);
+
+namespace rakro {
+    template <> struct BinaryDataInterface<uint24_t> {
+        static void write(const uint24_t& val, BinaryBuffer& buffer) {
+            auto bytes = std::bit_cast<std::array<uint8_t, sizeof(uint24_t)>>(val);
+
+            for (size_t x = 1; x < 4; x++) {
+                buffer.write_byte(bytes[x]);
+            }
+        }
+
+        static uint24_t read(BinaryBuffer& buffer) {
+            uint32_t bytes{};
+
+            for (size_t x = 0; x < 3; x++) {
+                bytes |= uint32_t(buffer.next_byte() << (x * 8));
+            }
+
+            return std::bit_cast<uint24_t>(bytes);
+        }
+
+        static size_t size(const std ::optional<uint24_t>&) { return 3; }
+    };
+} // namespace rakro
 
 namespace rakro {
     template <> struct BinaryDataInterface<std::string> {

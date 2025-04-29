@@ -24,7 +24,7 @@ namespace rakro {
             buffer.write(self.server_guid);
             buffer.write(self.client_address);
             buffer.write(self.MTU);
-            buffer.write(false);
+            buffer.write(false); // encryption
         }
 
         static packets::OpenConnectionReply2 read(BinaryBuffer& buffer) {

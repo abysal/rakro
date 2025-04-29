@@ -2,6 +2,8 @@
 
 #include <array>
 #include <bit>
+#include <chrono>
+#include <cstring>
 #include <expected>
 #include <span>
 #include <utility>
@@ -41,6 +43,11 @@ namespace rakro::detail {
 
     struct IPV4Addr {
         sockaddr_in address;
+
+        bool operator==(const IPV4Addr& other) const {
+            return address.sin_addr.s_addr == other.address.sin_addr.s_addr &&
+                   address.sin_port == other.address.sin_port;
+        }
     };
 
     class UdpSocket {
@@ -56,18 +63,23 @@ namespace rakro::detail {
         socket_t sock_handle{};
     };
 
+    inline size_t time_since_epoch() noexcept {
+        return static_cast<size_t>(std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       std::chrono::system_clock::now().time_since_epoch()
+        )
+                                       .count());
+    }
+
 } // namespace rakro::detail
 
 namespace std {
     template <> struct hash<rakro::detail::IPV4Addr> {
         size_t operator()(const rakro::detail::IPV4Addr& addr) const {
-            auto bytes =
-                std::bit_cast<std::array<std::uint8_t, sizeof(rakro::detail::IPV4Addr)>>(addr);
 
-            std::size_t hash = 0;
-            for (auto b : bytes) {
-                hash ^= std::hash<std::uint8_t>{}(b) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-            }
+            std::size_t hash =
+                std::hash<uint32_t>{}(std::bit_cast<uint32_t>(addr.address.sin_addr));
+            hash ^= std::hash<uint16_t>{}(std::bit_cast<uint16_t>(addr.address.sin_port)) +
+                    0x9e3779b9 + (hash << 6);
             return hash;
         }
     };

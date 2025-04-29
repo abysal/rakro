@@ -12,11 +12,6 @@ add_library(rakro
     ${RAKRO_HEADERS}
 )
 
-set(LIBCORO_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(LIBCORO_FEATURE_TLS OFF CACHE BOOL "" FORCE)
-set(LIBCORO_CODE_COVERAGE OFF CACHE BOOL "" FORCE)
-set(LIBCORO_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-
 # Point the PUBLIC include directory to the parent of the "rakro/" folder
 target_include_directories(rakro
     PUBLIC

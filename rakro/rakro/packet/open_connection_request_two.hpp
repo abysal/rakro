@@ -7,6 +7,7 @@
 
 namespace rakro::packets {
     struct OpenConnectionRequest2 {
+        uint16_t mtu{};
         uint64_t client_guid{};
     };
 
@@ -21,13 +22,14 @@ namespace rakro {
         static packets::OpenConnectionRequest2 read(BinaryBuffer& buffer) {
             (void)buffer.read_next<MagicType>();
             (void)buffer.read_next<packets::RakAddress>();
-            (void)buffer.read_next<uint16_t>(); // MTU
-            return packets::OpenConnectionRequest2{.client_guid = buffer.read_next<uint64_t>()};
+            return packets::OpenConnectionRequest2{
+                .mtu         = buffer.read_next<uint16_t>(), // MTU
+                .client_guid = buffer.read_next<uint64_t>()
+            };
         }
 
         static size_t size(const std::optional<packets::OpenConnectionRequest2>& /*unused*/) {
-            return sizeof(MagicType) + 7 + 2 +
-                   sizeof(packets::OpenConnectionRequest2); // Random as fuck guess
+            return 33; // Random as fuck guess
         }
     };
 

@@ -25,10 +25,6 @@ namespace rakro {
             buffer.write(self.server_guid);
             buffer.write(false);
             buffer.write(self.MTU);
-
-            // for (int x = 0; x < 32; x++) {
-            //     buffer.write_byte(0xCD);
-            // }
         }
 
         static packets::OpenConnectionReply1 read(BinaryBuffer& buffer) {
